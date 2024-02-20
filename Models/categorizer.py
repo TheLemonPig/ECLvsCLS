@@ -96,6 +96,9 @@ class Trainer:
         predicted = self.model(x).detach().numpy()
         return predicted
 
+    def nearest_pairing(self, predictions, targets):
+        ...
+
 
 if __name__ == '__main__':
     # Training data (pairs of numbers)

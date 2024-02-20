@@ -6,8 +6,6 @@ from Models.model import Categorizer, Trainer
 
 # ---- Generate Data ----
 # Create pairings (a,b) and (a,c)
-# where b=0 for 0 <= a < B_BOUNDARY and b=1 for B_BOUNDARY <= a < RANGE
-# where c=0 for 0 <= a < C_BOUNDARY and c=1 for C_BOUNDARY <= a < RANGE
 RANGE = 20
 # It doesn't make sense to have a test size if you are teaching arbitrary associations
 a_data = np.arange(RANGE)

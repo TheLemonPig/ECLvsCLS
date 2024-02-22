@@ -21,6 +21,7 @@ n_reps = 20
 
 # test_params = [(hidden_size, sample_size)]
 test_params = [(10**a, sample_size, epochs_*4**(3-a)) for a in range(1, 4)]
+# test_params = [5,12,100,1000]
 b_losses = []
 c_losses = []
 for hidden_size, sample_size, epochs in test_params:

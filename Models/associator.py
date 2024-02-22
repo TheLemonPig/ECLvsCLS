@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 from copy import deepcopy
 import numpy as np
+from tqdm import tqdm
 
 
 class Associator(nn.Module):
@@ -47,6 +48,9 @@ class Trainer:
                 test_input[:, -self.model.context_size:-self.model.context_size//2] = 1
             elif test_condition == 1:
                 test_input[:, -self.model.context_size//2:] = 1
+        loss_val = None
+        acc_val = 0
+        progress_bar = tqdm(total=num_epochs, desc='Training')
         for epoch in range(num_epochs):
             # Forward pass
             output = self.model(input_data)
@@ -65,18 +69,22 @@ class Trainer:
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-
+            loss_val = loss.item()
+            acc_val = accuracy.item()
+            progress_bar.update(1)
+            progress_bar.set_postfix_str(f'Loss: {loss.item():.4f}, Accuracy: {accuracy.item()*100:.2f}%')
+            # f'Loss: {loss_val:.4f}, Accuracy: {acc_val*100:.2f}%'
             # Print the loss every 'print_every' epochs
-            if (epoch + 1) % print_every == 0:
-                print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}, Accuracy: {accuracy.item()*100:.2f}%')
+            #if (epoch + 1) % print_every == 0:
+            #    print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}, Accuracy: {accuracy.item()*100:.2f}%')
             if delta_break and epoch > 10000:
                 delta = continuous_loss[-10000] - continuous_loss[-1]
                 if delta < 10e-5:
-                    print(f'from {continuous_loss[-10000]} to {continuous_loss[-1]} over 10e4 epochs')
-                    print(f'{delta} < 10e-5 and hence by arbitrary threshold, training has converged')
+                    print(f'\nfrom {continuous_loss[-10000]:.6f} to {continuous_loss[-1]:.6f} over 10e4 epochs')
+                    print(f'{delta:.6f} < 10e-5 and hence by arbitrary threshold, training has converged')
                     break
                 elif sum(self.losses[-5:]) == 5.0:
-                    print("100% for 5 trials in a row!! Training Complete")
+                    print("\n100% for 5 trials in a row!! Training Complete")
                     break
 
         return test_losses

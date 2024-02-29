@@ -7,7 +7,7 @@ from Models.associator import Associator, Trainer
 # Define input, hidden, and output sizes
 #input_sizes = [1, 2, 3, 4, 5]
 input_sizes = [4]
-hidden_sizes = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]  # model capacity proxy
+hidden_sizes = list(range(10, 20))  # model capacity proxy
 #output_sizes = [1, 2, 3, 4, 5]
 output_sizes = input_sizes
 context_size = 2

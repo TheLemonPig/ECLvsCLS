@@ -55,6 +55,7 @@ class Trainer:
 
         # Complete training data formatting
         train_input, train_output, train_condition = training_data
+        train_input.requires_grad_(True)
         condition_train = torch.zeros((train_input.shape[0], self.model.n_conditions))
         if train_condition is not None:
             condition_train[:, train_condition] = 1
@@ -83,7 +84,7 @@ class Trainer:
         # allow print enough time to catch up to tqdm to prevent overlap
         sleep(sleep_time)
         # initialize progress bar
-        progress_bar = tqdm(total=num_epochs, desc=f'Training Regime: {stop}')
+        progress_bar = tqdm(total=num_epochs, desc=f'Regime: {stop}')
 
         # begin training loop
         epoch = 0
@@ -98,18 +99,6 @@ class Trainer:
             train_accuracy = classify_associations(train_predict.detach(), train_output, normalize)
             self.losses['train_accuracy'].append(train_accuracy.item())
 
-            # run all tests
-
-            for i in range(n_tests):
-                # forward pass
-                test_predict = self.model(test_inputs[i])
-                test_loss = self.criterion(test_predict, test_outputs[i])
-
-                # collect test losses
-                self.losses['tests_continuous'][i].append(test_loss)
-                test_accuracy = classify_associations(test_predict.detach(), test_outputs[i], normalize)
-                self.losses['tests_accuracy'][i].append(test_accuracy.item())
-
             # Backward pass over training loss and update weights
             self.optimizer.zero_grad()
             train_loss.backward()
@@ -120,6 +109,20 @@ class Trainer:
             accuracy = train_accuracy.item()
             progress_bar.update(1)  # increment epoch counter
             progress_bar.set_postfix_str(f'Loss: {loss:.4f}, Accuracy: {accuracy*100:.2f}%')
+
+            # run all tests
+            self.model.eval()
+            with torch.no_grad():
+                for i in range(n_tests):
+                    # forward pass
+                    test_predict = self.model(test_inputs[i])
+                    test_loss = self.criterion(test_predict, test_outputs[i])
+
+                    # collect test losses
+                    self.losses['tests_continuous'][i].append(test_loss.item())
+                    test_accuracy = classify_associations(test_predict.detach(), test_outputs[i], normalize)
+                    self.losses['tests_accuracy'][i].append(test_accuracy.item())
+            self.model.train()
 
             # Identify whether training should be curtailed based on our training regime
             if regime['epochs']:
@@ -172,7 +175,7 @@ class Trainer:
         # check that epoch limit is not reached if the regime is not epochs
         if not regime['epochs'] and epoch == num_epochs:
             raise RuntimeWarning('Upper Limit of Epochs reached while training in a non-epoch regime')
-        self.losses['n_epochs'] = (epoch, num_epochs)
+        self.losses['n_epochs'] = (epoch+1, num_epochs)
         return self.losses
 
 

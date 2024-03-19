@@ -1,73 +1,85 @@
 import torch
 from torch import optim, nn
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+import pickle
+import os
 
 from Models.associator import Associator, Trainer
+from Models.transforms import rotate
 
 # Define input, hidden, and output sizes
-input_size = 5
-hidden_size = 25  # model capacity proxy
-output_size = 5
-context_size = 2
+config = dict({
+    'input_size': 5,
+    'output_size': 5,
+    'sample_size': 10,
+    'model_layers': 2,
+    # Extra parameters
+    'first_epochs': 20000,
+    'second_epochs': 2000,
+    'lr': 0.01,
+    'n_reps': 20,
+    'test_size': 10,
+    # Generalization parameters
+    'noise': 0.5,  # 1 = random noise function
+    'signal_complexity': 2.0,  # 0 = identity function
+    'criterion': nn.MSELoss,
+    'optimizer': optim.SGD
+})
+config['seeds'] = list(range(config['n_reps']))
+start_size = 5
+data_capacities = dict({k: -1 for k in range(config['n_reps'])})
+for seed in config['seeds']:
+    print(f'Finding Sufficient Capacity for seed={seed}')
+    seed_capacity = dict()
+    hidden_size = start_size
+    while (True not in seed_capacity.values()) or (False not in seed_capacity.values()):
+        if len(seed_capacity) > 0 and seed_capacity[hidden_size] is True:
+            print(f'Sufficient Capacity <= {hidden_size}')
+            hidden_size -= 1
+        elif len(seed_capacity) > 0 and seed_capacity[hidden_size] is False:
+            print(f'Sufficient Capacity > {hidden_size}')
+            hidden_size += 1
 
-# Extra parameters
-n_reps = 3
-p = 0.05
-sample_size = 10  # data size proxy
-epochs_ = -1
-lr_ = 0.01
-
-# test_params = [(hidden_size, sample_size)]
-test_params = [(hidden_size, c) for c in [2*hidden_size, int(2.2*hidden_size), int(2.4*hidden_size)]]
-param_losses = {}
-completed_reps = {}
-excess_capacity = {}
-for hidden_size, sample_size in test_params:
-    total_losses = []
-    strike = False
-    broke = False
-    n = 0
-    for n in range(n_reps):
-        if False in excess_capacity.values():
-            break
-        torch.manual_seed(n)
+        torch.manual_seed(seed)
         # Create an instance of the VectorMapper class
-        model = Associator(input_size, hidden_size, output_size, context_size)
+        model = Associator(config['input_size'], hidden_size, config['output_size'])
 
         # Define a loss function and an optimizer
-        criterion = nn.MSELoss()
-        optimizer = optim.SGD(model.parameters(), lr=lr_)
+        criterion = config['criterion']()
+        optimizer = config['optimizer'](model.parameters(), lr=config['lr'])
 
         # Create a Trainer instance
         trainer = Trainer(model, criterion, optimizer)
 
-        # Random A data
-        a_data = torch.randn(sample_size, input_size)
+        # Random x data
+        x = torch.randn(config['sample_size'], config['input_size'])
 
-        # Random B data
-        b_data = torch.randn(sample_size, output_size)
+        # Rotated and noise-embedded y data
+        y = (1.0 - config['noise']) * rotate(x, n_dims=int(config['signal_complexity'])) + \
+            config['noise'] * torch.randn(config['sample_size'], config['input_size'])
 
-        # Set B condition
-        a_data[:, -context_size:] = 0
-        # Train the model on associating A with B
-        trainer.train(a_data, b_data, num_epochs=epochs_, print_every=1000)
-        total_losses.append(trainer.losses)
-        # Abort if more than one instance of memorization was unsuccessful
-        if trainer.losses[-1] < 1.0:
-            if strike:
-                broke = True
-                break
+        results = trainer.train((x, y, 0), num_epochs=config['first_epochs'])
+        seed_capacity[hidden_size] = (results['train_accuracy'][-1] == 1.0)
+    sufficient_capacity = start_size
+    for hidden_size in seed_capacity.keys():
+        if seed_capacity[hidden_size]:
+            if seed_capacity[sufficient_capacity]:
+                if hidden_size < sufficient_capacity:
+                    sufficient_capacity = hidden_size
             else:
-                strike = True
-    excess_capacity[(hidden_size, sample_size)] = not broke
-    completed_reps[(hidden_size, sample_size)] = n+1
-    param_losses[(hidden_size, sample_size)] = total_losses
+                sufficient_capacity = hidden_size
+    print(f'Sufficient Capacity = {sufficient_capacity}\n')
+    data_capacities[seed] = sufficient_capacity
 
-for params in param_losses.keys():
-    print(f'{params}: {excess_capacity[params]}')
-for params in param_losses.keys():
-    for rep in range(completed_reps[params]):
-        print(f'{params} rep {rep}: {param_losses[params][rep][-1]}')
+config['seed_capacities'] = data_capacities
+print(data_capacities)
 
+filename = 'Capacity_Estimator_' + str(datetime.now()) + '.pkl'
+filepath = os.path.join('../Logs', filename)
+with open(filepath, 'wb') as f:
+    pickle.dump(config, f)
 
 if __name__ == "__main__":
     ...

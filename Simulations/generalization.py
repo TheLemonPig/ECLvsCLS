@@ -11,7 +11,6 @@ from Models.transforms import rotate
 
 # Define input, hidden, and output sizes
 config = dict({
-    # TODO: Update parameters to better fit - 5 data dims does not correspond to sufficient capacity of 12 nodes
     'input_size': 5,
     # 'hidden_size': 10,
     'hidden_sizes': [5, 15, 100, 1000],

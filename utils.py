@@ -2,16 +2,16 @@ import pickle
 import os
 
 
-def get_most_recent():
+def get_most_recent(prefix=''):
     most_recent = None
     file = None
     for file in os.listdir('Logs'):
-        if most_recent is None:
-            most_recent = file
-            print(most_recent)
-        else:
-            if most_recent < file:
+        if file.startswith(prefix):
+            if most_recent is None:
                 most_recent = file
+            else:
+                if most_recent < file:
+                    most_recent = file
     if file is None:
         raise RuntimeError('No log files to retrieve')
     else:

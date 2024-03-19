@@ -36,17 +36,18 @@ class Trainer:
         self.losses = dict()
 
     def train(self, training_data, tests=None,
-              num_epochs=1000, stop='epochs', epoch_min=10000, delta_min=10e-5, normalize=False, sleep_time=0):
+              num_epochs=1000, stops=('epochs', ), epoch_min=10000, delta_min=10e-5, normalize=False, sleep_time=0):
         # Set training regime
         regime = dict({'epochs': False,
                        'delta_train': False, 'one_delta_test': False, 'all_delta_test': False,
                        'train_accuracy': False, 'one_test_accuracy': False, 'all_test_accuracy': False})
 
         # Check that stop arg is a valid training regime
-        if stop not in regime.keys():
-            raise KeyError('Unrecognized training regime')
-        else:
-            regime[stop] = True
+        for stop in stops:
+            if stop not in regime.keys():
+                raise KeyError('Unrecognized training regime')
+            else:
+                regime[stop] = True
 
         # remove epochs as a meaningful training parameter when epochs is not the training regime
         if not regime['epochs']:
@@ -84,7 +85,7 @@ class Trainer:
         # allow print enough time to catch up to tqdm to prevent overlap
         sleep(sleep_time)
         # initialize progress bar
-        progress_bar = tqdm(total=num_epochs, desc=f'Regime: {stop}')
+        progress_bar = tqdm(total=num_epochs, desc=f'Regime: {stops}')
 
         # begin training loop
         epoch = 0
@@ -127,12 +128,12 @@ class Trainer:
             # Identify whether training should be curtailed based on our training regime
             if regime['epochs']:
                 continue
-            elif regime['train_accuracy']:
+            if regime['train_accuracy']:
                 if sum(self.losses['train_accuracy'][-1:]) == 1.0:
                     print("\n100% achieved!! Training Complete")
                     sleep(sleep_time)
                     break
-            elif regime['one_test_accuracy'] or regime['all_test_accuracy']:
+            if regime['one_test_accuracy'] or regime['all_test_accuracy']:
                 delta_break = False
                 for i in range(n_tests):
                     if sum(self.losses['test_accuracy'][i][-1:]) == 1.0:
@@ -147,16 +148,17 @@ class Trainer:
                         print("\n100% achieved on all tests!! Testing Complete")
                     sleep(sleep_time)
                     break
-            elif regime['delta_train'] and epoch > epoch_min:
-                past_loss: list = self.losses['train_continuous']
-                recent_loss: list = self.losses['train_continuous']
-                delta = past_loss[-epoch_min] - recent_loss[-1]
+            if regime['delta_train'] and epoch > epoch_min:
+                loss: list = self.losses['train_continuous']
+                past_loss: float = loss[-epoch_min]
+                recent_loss: float = loss[-1]
+                delta = past_loss - recent_loss
                 if delta < delta_min:
                     print(f'\nfrom {past_loss:.6f} to {recent_loss:.6f} over 10e4 epochs')
                     print(f'{delta:.6f} < {delta_min} and hence by arbitrary threshold, training has converged')
                     sleep(sleep_time)
                     break
-            elif (regime['one_delta_test'] or regime['all_delta_test']) and epoch > epoch_min:
+            if (regime['one_delta_test'] or regime['all_delta_test']) and epoch > epoch_min:
                 delta_break = False
                 for i in range(n_tests):
                     past_loss = self.losses['test_continuous'][i][-epoch_min]
@@ -186,7 +188,7 @@ def classify_associations(output, target_data, normalize=False):
 
 
 # Classification is based on cosine similarity of vectors
-def nearest_neighbors(output_vectors, target_vectors, normalize=False):
+def nearest_neighbors(output_vectors, target_vectors, normalize=True):
     # normalize inputs if you want to take relative magnitude into account
     if normalize:
         output_vectors = F.normalize(output_vectors, p=2, dim=1)

@@ -88,7 +88,20 @@ from utils import get_most_recent
 #     plt.title('second: all three combined')
 # plt.show()
 
+# Model Sizes for each seed with sample size 30 NOISE=0.5
+# {0: 9, 1: 9, 2: 9, 3: 8, 4: 10, 5: 9, 6: 8, 7: 9, 8: 10, 9: 9, 10: 8, 11: 9, 12: 11, 13: 8, 14: 10, 15: 8, 16: 9, 17: 8, 18: 8, 19: 10}
+# Model Sizes for each seed with sample size 50 NOISE=1.0
+#{0: 12, 1: 12, 2: 13, 3: 13, 4: 13, 5: 12, 6: 13, 7: 12, 8: 13, 9: 11, 10: 12, 11: 13, 12: 13, 13: 12, 14: 11, 15: 11, 16: 12, 17: 12, 18: 11, 19: 15}
+# Sample Sizes for each seed with hidden size 10 NOISE=0.1
+
+# Sample Sizes for each seed with hidden size 10 NOISE=0.5
+# {0: 18, 1: 19, 2: 17, 3: 18, 4: 15, 5: 13, 6: 19, 7: 14, 8: 17, 9: 15, 10: 16, 11: 13, 12: 16, 13: 17, 14: 17, 15: 19, 16: 15, 17: 16, 18: 18, 19: 13}
+# Sample Sizes for each seed with hidden size 10 NOISE=1.0
+# {0: 17, 1: 19, 2: 19, 3: 20, 4: 20, 5: 20, 6: 20, 7: 18, 8: 22, 9: 19, 10: 18, 11: 20, 12: 19, 13: 20, 14: 18, 15: 21, 16: 18, 17: 18, 18: 19, 19: 20}
+
 import torch
+from Models.associator import Associator
+
 
 # Define a simple neural network
 class SimpleNet(torch.nn.Module):
@@ -124,3 +137,17 @@ jacobian = x.grad.view(1, -1)
 
 print("Jacobian Matrix:")
 print(jacobian)
+
+torch.manual_seed(0)
+first = torch.randn((2, 2))
+torch.manual_seed(0)
+second = torch.randn((2, 2))
+assert (first == second).sum() == 4
+
+torch.manual_seed(0)
+Associator(5, 10, 5)
+first = torch.randn((2, 2))
+torch.manual_seed(0)
+Associator(5, 15, 5)
+second = torch.randn((2, 2))
+assert (first == second).sum() == 4

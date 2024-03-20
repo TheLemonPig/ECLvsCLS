@@ -8,18 +8,17 @@ def get_most_recent(prefix='', script_path='..', config=None):
     log_path = os.path.join(script_path, 'Logs')
     for file in os.listdir(log_path):
         if file.startswith(prefix):
-            if most_recent is None:
-                most_recent = file
-            else:
-                match = True
-                if config is not None:
-                    with open(os.path.join(log_path, most_recent), 'rb') as f:
-                        temp_log = pickle.load(f)
-                    for arg in temp_log.keys():
+            match = True
+            if config is not None:
+                with open(os.path.join(log_path, file), 'rb') as f:
+                    temp_log = pickle.load(f)
+                for arg in temp_log.keys():
+                    if arg not in ['stops', 'first_epochs', 'fit_samples', 'fit_models',
+                                   'seeds', 'model_seed_capacities']:
                         match = match and (arg in config.keys()) and (temp_log[arg] == config[arg])
-                if match:
-                    if most_recent < file:
-                        most_recent = file
+            if match:
+                if most_recent is None or most_recent < file:
+                    most_recent = file
     if most_recent is None:
         raise RuntimeError('No log files to retrieve')
     else:

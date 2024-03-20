@@ -178,7 +178,18 @@ class Trainer:
         if not regime['epochs'] and epoch == num_epochs:
             raise RuntimeWarning('Upper Limit of Epochs reached while training in a non-epoch regime')
         self.losses['n_epochs'] = (epoch+1, num_epochs)
+        if epoch + 1 < num_epochs:
+            self.pad_results()
         return self.losses
+
+    def pad_results(self):
+        completed_epochs, planned_epochs = self.losses['n_epochs']
+        num_padding = planned_epochs - completed_epochs
+        self.losses['train_continuous'] += [self.losses['train_continuous'][-1] for _ in range(num_padding)]
+        self.losses['train_accuracy'] += [self.losses['train_accuracy'][-1] for _ in range(num_padding)]
+        for i in range(len(self.losses['tests_accuracy'])):
+            self.losses['tests_continuous'][i] += [self.losses['tests_continuous'][i][-1] for _ in range(num_padding)]
+            self.losses['tests_accuracy'][i] += [self.losses['tests_accuracy'][i][-1] for _ in range(num_padding)]
 
 
 # These function are used to convert continuous predictions into classification predictions

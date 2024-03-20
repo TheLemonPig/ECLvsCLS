@@ -10,105 +10,111 @@ from utils import get_most_recent, make_data
 from Models.associator import Associator, Trainer
 from Models.transforms import rotate
 
-# Define input, hidden, and output sizes
-config = dict({
-    'input_size': 5,
-    # 'hidden_size': 10,
-    'hidden_sizes': [5, 10, 100, 1000],
-    'output_size': 5,
-    # Extra parameters
-    'sample_size': 10,  # data size proxy
-    'fit_samples': False,
-    'fit_models': True,
-    'first_epochs': -1,
-    'stops': ('delta_train',),
-    'second_epochs': 2000,  #2000,
-    'lr': 0.001,
-    'n_reps': 10,
-    # Generalization parameters
-    'noise': 0.5,  # 1 = random noise function
-    'signal_complexity': 2.0,  # 0 = identity function
-    'criterion': nn.MSELoss,
-    'optimizer': optim.Adam
-    # test_params = [(hidden_size, sample_size)]
-    # test_params = [(10**a, sample_size, epochs_*4**(3-a)) for a in range(1, 4)]
-})
-sample_sizes = None
-sufficient_capacities = None
-if config['fit_samples']:
-    # TODO: Get get_most_recent to find most recent where all config parameters match
-    config_log = get_most_recent(prefix='Capacity_Fitter', config=config)
-    sample_sizes = config_log['data_seed_capacities']
-    config['sample_size'] = None
-    config['sample_sizes'] = sample_sizes
-elif config['fit_models']:
-    config_log = get_most_recent(prefix='Capacity_Estimator', config=config)
-    sufficient_capacities = config_log['model_seed_capacities']
-    config['hidden_sizes'] = [None for _ in config['hidden_sizes']]
-    config['sufficient_capacities'] = sufficient_capacities
-    config['relative_sizes'] = [0.5, 1.0, 10, 100]
+from_file = True
 
-config['params'] = [(hidden_size, config['sample_size']) for hidden_size in config['hidden_sizes']]
-config['results'] = dict()
+if not from_file:
 
-for idx, (hidden_size, sample_size) in enumerate(config['params']):
-    firsts = []
-    seconds = []
-    for n in range(config['n_reps']):
-        print(f'Rep: {n}')
-        torch.manual_seed(n)
-        if sample_sizes is not None:
-            sample_size = sample_sizes[n]
-        elif sufficient_capacities is not None:
-            hidden_size = int(config['relative_sizes'][idx] * sufficient_capacities[n])
-            assert hidden_size > 2, TypeError('No space for condition labels')
-        # Create an instance of the VectorMapper class
-        model = Associator(config['input_size'], hidden_size, config['output_size'], n_conditions=2)
+    # Define input, hidden, and output sizes
+    config = dict({
+        'input_size': 5,
+        # 'hidden_size': 10,
+        # 'hidden_sizes': [5, 10, 100, 1000],
+        'output_size': 5,
+        # Extra parameters
+        'sample_size': 50,  # data size proxy
+        'fit_samples': False,
+        'fit_models': True,
+        'first_epochs': 20000,
+        'stops': ('epochs',),
+        'model_layers': 2,
+        'second_epochs': 2000,  #2000,
+        'lr': 0.001,
+        'n_reps': 20,
+        # Generalization parameters
+        'noise': 0.5,  # 1 = random noise function
+        'signal_complexity': 2.0,  # 0 = identity function
+        'criterion': nn.MSELoss,
+        'optimizer': optim.Adam
+        # test_params = [(hidden_size, sample_size)]
+        # test_params = [(10**a, sample_size, epochs_*4**(3-a)) for a in range(1, 4)]
+    })
+    sample_sizes = None
+    sufficient_capacities = None
+    if config['fit_samples']:
+        config_log = get_most_recent(prefix='Capacity_Fitter', config=config)
+        sample_sizes = config_log['data_seed_capacities']
+        config['sample_size'] = None
+        config['sample_sizes'] = sample_sizes
+    elif config['fit_models']:
+        config_log = get_most_recent(prefix='Capacity_Estimator', config=config)
+        sufficient_capacities = config_log['model_seed_capacities']
+        config['relative_sizes'] = [0.5, 1.0, 10, 100]
+        config['hidden_sizes'] = [None for _ in config['relative_sizes']]
+        config['sufficient_capacities'] = sufficient_capacities
 
-        # Define a loss function and an optimizer
-        criterion = config['criterion']()
-        optimizer = config['optimizer'](model.parameters(), lr=config['lr'])
 
-        # Create a Trainer instance
-        trainer = Trainer(model, criterion, optimizer)
+    config['params'] = [(hidden_size, config['sample_size']) for hidden_size in config['hidden_sizes']]
+    config['results'] = dict()
 
-        # Random A data
-        a_train = make_data(sample_size, config['input_size'], n)
-        a_test = make_data(sample_size, config['input_size'], n+2)
+    for idx, (hidden_size, sample_size) in enumerate(config['params']):
+        firsts = []
+        seconds = []
+        for n in range(config['n_reps']):
+            print(f'Rep: {n}')
+            torch.manual_seed(n)
+            if sample_sizes is not None:
+                sample_size = sample_sizes[n]
+            elif sufficient_capacities is not None:
+                hidden_size = int(config['relative_sizes'][idx] * sufficient_capacities[n])
+                assert hidden_size > 2, TypeError('No space for condition labels')
+            # Create an instance of the VectorMapper class
+            model = Associator(config['input_size'], hidden_size, config['output_size'], n_conditions=2)
 
-        # Rotated B data
-        b_data = (1.0 - config['noise']) * rotate(a_train, n_dims=int(config['signal_complexity'])) + \
-                 config['noise'] * make_data(sample_size, config['input_size'], n+1)
+            # Define a loss function and an optimizer
+            criterion = config['criterion']()
+            optimizer = config['optimizer'](model.parameters(), lr=config['lr'])
 
-        # Rotated C data
-        c_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity'])) + \
-                 config['noise'] * make_data(sample_size, config['input_size'], n+3)
+            # Create a Trainer instance
+            trainer = Trainer(model, criterion, optimizer)
 
-        # Train the model on associating a_train with B cond=0 while testing a_test on C cond=0
-        # This test OOD generalization
-        first = trainer.train((a_train, b_data, 0), tests=[(a_test, c_data, 0)], num_epochs=config['first_epochs'],
-                              stops=config['stops'])
+            # Random A data
+            a_train = make_data(sample_size, config['input_size'], n)
+            a_test = make_data(sample_size, config['input_size'], n+2)
 
-        # Train the model on associating a_train with C cond=1 while testing a_train on B & a_test on C cond=0
-        # This tests retention of arbitrary and structured knowledge
-        second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, c_data, 0)],
-                               num_epochs=config['second_epochs'])
+            # Rotated B data
+            b_data = (1.0 - config['noise']) * rotate(a_train, n_dims=int(config['signal_complexity'])) + \
+                     config['noise'] * make_data(sample_size, config['input_size'], n+1)
 
-        epochs_completed, epochs_planned = first['n_epochs']
+            # Rotated C data
+            c_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity'])) + \
+                     config['noise'] * make_data(sample_size, config['input_size'], n+3)
 
-        firsts.append(first)
-        seconds.append(second)
-    config['results'][(hidden_size, sample_size)] = firsts, seconds
+            # Train the model on associating a_train with B cond=0 while testing a_test on C cond=0
+            # This test OOD generalization
+            first = trainer.train((a_train, b_data, 0), tests=[(a_test, c_data, 0)], num_epochs=config['first_epochs'],
+                                  stops=config['stops'])
 
-filename = 'Generalization_' + str(datetime.now()) + '.pkl'
-filepath = os.path.join('../Logs', filename)
-with open(filepath, 'wb') as f:
-    pickle.dump(config, f)
+            # Train the model on associating a_train with C cond=1 while testing a_train on B & a_test on C cond=0
+            # This tests retention of arbitrary and structured knowledge
+            second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, c_data, 0)],
+                                   num_epochs=config['second_epochs'])
 
+            epochs_completed, epochs_planned = first['n_epochs']
+
+            firsts.append(first)
+            seconds.append(second)
+        config['results'][(hidden_size, sample_size)] = firsts, seconds
+
+    filename = 'Generalization_' + str(datetime.now()) + '.pkl'
+    filepath = os.path.join('../Logs', filename)
+    with open(filepath, 'wb') as f:
+        pickle.dump(config, f)
+else:
+    config = get_most_recent(prefix='Generalization')
 
 # ---- Present Results ----
 
-top = np.log10(max(config['hidden_sizes']))
+top = np.log10(config['relative_sizes'][-1]*max(config['sufficient_capacities']))
 
 # --- Plot 1 ---
 

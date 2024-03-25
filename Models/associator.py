@@ -6,15 +6,16 @@ from time import sleep
 
 
 class Associator(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, n_conditions=2, hidden_layers=1):
+    def __init__(self, input_size, hidden_size, output_size, n_conditions=2, hidden_layers=1, context_size=1):
         super(Associator, self).__init__()
-        self.fc1 = nn.Linear(input_size+n_conditions, hidden_size)
+        self.fc1 = nn.Linear(input_size+n_conditions*context_size, hidden_size)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         # self.layers = [nn.Linear(hidden_size, hidden_size) for _ in range(hidden_layers-1)]
         # TODO: Test variable layer feature - speed and replicable against current setup
         self.fc3 = nn.Linear(hidden_size, output_size)
         self.n_conditions = n_conditions
+        self.context_size = context_size
 
     def forward(self, x):
         x = self.fc1(x)
@@ -36,7 +37,7 @@ class Trainer:
         self.losses = dict()
 
     def train(self, training_data, tests=None,
-              num_epochs=1000, stops=('epochs', ), epoch_min=10000, delta_min=10e-5, normalize=False, sleep_time=0):
+              num_epochs=1000, stops=('epochs', ), epoch_min=1000, delta_min=10e-5, normalize=False, sleep_time=0.1):
         # Set training regime
         regime = dict({'epochs': False,
                        'delta_train': False, 'one_delta_test': False, 'all_delta_test': False,
@@ -57,9 +58,9 @@ class Trainer:
         # Complete training data formatting
         train_input, train_output, train_condition = training_data
         train_input.requires_grad_(True)
-        condition_train = torch.zeros((train_input.shape[0], self.model.n_conditions))
+        condition_train = torch.zeros((train_input.shape[0], self.model.n_conditions*self.model.context_size))
         if train_condition is not None:
-            condition_train[:, train_condition] = 1
+            condition_train[:, train_condition*self.model.context_size:(train_condition+1)*self.model.context_size] = 1
         else:
             raise UserWarning('Training data supplied without training condition')
         train_input = torch.cat((train_input, condition_train), dim=1)
@@ -73,8 +74,8 @@ class Trainer:
             n_tests = len(tests)
             for i in range(n_tests):
                 test_input, test_output, test_condition = tests[i]
-                condition_test = torch.zeros((test_input.shape[0], self.model.n_conditions))
-                condition_test[:, test_condition] = 1
+                condition_test = torch.zeros((test_input.shape[0], self.model.n_conditions*self.model.context_size))
+                condition_test[:, test_condition*self.model.context_size:(test_condition+1)*self.model.context_size] = 1
                 test_input = torch.cat((test_input, condition_test), dim=1)
                 test_inputs.append(test_input)
                 test_outputs.append(test_output)
@@ -126,8 +127,6 @@ class Trainer:
             self.model.train()
 
             # Identify whether training should be curtailed based on our training regime
-            if regime['epochs']:
-                continue
             if regime['train_accuracy']:
                 if sum(self.losses['train_accuracy'][-1:]) == 1.0:
                     print("\n100% achieved!! Training Complete")

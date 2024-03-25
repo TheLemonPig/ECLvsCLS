@@ -5,12 +5,13 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import pickle
 import os
+from typing import List, Tuple
 
 from utils import get_most_recent, make_data
 from Models.associator import Associator, Trainer
 from Models.transforms import rotate
 
-from_file = True
+from_file = False
 
 if not from_file:
 
@@ -21,20 +22,23 @@ if not from_file:
         # 'hidden_sizes': [5, 10, 100, 1000],
         'output_size': 5,
         # Extra parameters
-        'sample_size': 50,  # data size proxy
+        'sample_size': 10,  # data size proxy
+        'context_size': 5,
         'fit_samples': False,
         'fit_models': True,
-        'first_epochs': 20000,
-        'stops': ('epochs',),
-        'model_layers': 2,
+        'first_epochs': 200000,
+        'stops': ('epochs', 'delta_train'),
+        'delta_min': 10e-5,
+        'epoch_min': 5000,
+        'model_layers': 2,  # This currently does nothing
         'second_epochs': 2000,  #2000,
         'lr': 0.001,
         'n_reps': 20,
         # Generalization parameters
-        'noise': 0.5,  # 1 = random noise function
+        'noise': 0.1,  # 1 = random noise function
         'signal_complexity': 2.0,  # 0 = identity function
         'criterion': nn.MSELoss,
-        'optimizer': optim.Adam
+        'optimizer': optim.SGD
         # test_params = [(hidden_size, sample_size)]
         # test_params = [(10**a, sample_size, epochs_*4**(3-a)) for a in range(1, 4)]
     })
@@ -45,13 +49,14 @@ if not from_file:
         sample_sizes = config_log['data_seed_capacities']
         config['sample_size'] = None
         config['sample_sizes'] = sample_sizes
+        config['seeds'] = list(range(config['n_reps']))
     elif config['fit_models']:
         config_log = get_most_recent(prefix='Capacity_Estimator', config=config)
         sufficient_capacities = config_log['model_seed_capacities']
         config['relative_sizes'] = [0.5, 1.0, 10, 100]
         config['hidden_sizes'] = [None for _ in config['relative_sizes']]
         config['sufficient_capacities'] = sufficient_capacities
-
+        config['seeds'] = config_log['seeds']
 
     config['params'] = [(hidden_size, config['sample_size']) for hidden_size in config['hidden_sizes']]
     config['results'] = dict()
@@ -59,16 +64,16 @@ if not from_file:
     for idx, (hidden_size, sample_size) in enumerate(config['params']):
         firsts = []
         seconds = []
-        for n in range(config['n_reps']):
-            print(f'Rep: {n}')
+        for i, n in enumerate(config['seeds']):
+            print(f'Rep: {i}')
             torch.manual_seed(n)
             if sample_sizes is not None:
                 sample_size = sample_sizes[n]
             elif sufficient_capacities is not None:
                 hidden_size = int(config['relative_sizes'][idx] * sufficient_capacities[n])
-                assert hidden_size > 2, TypeError('No space for condition labels')
             # Create an instance of the VectorMapper class
-            model = Associator(config['input_size'], hidden_size, config['output_size'], n_conditions=2)
+            model = Associator(config['input_size'], hidden_size, config['output_size'], n_conditions=2,
+                               context_size=config['context_size'])
 
             # Define a loss function and an optimizer
             criterion = config['criterion']()
@@ -114,11 +119,51 @@ else:
 
 # ---- Present Results ----
 
-top = np.log10(config['relative_sizes'][-1]*max(config['sufficient_capacities']))
+top = np.log(config['relative_sizes'][-1]*max(config['sufficient_capacities']))/np.log(5)
 
 # --- Plot 1 ---
 
-for params in config['results']:
+
+def plot_capacity_curves(curves: List[Tuple[int, str, int]], capacities: List[float], title: str):
+    curves_array = None
+    for parameters in config['results']:
+        results = config['results'][parameters]
+        n_epochs = curves[0][0] * config['second_epochs'] + (1 - curves[0][0]) * config['first_epochs']
+        n_curves = len(curves)
+        curves_array = np.zeros((n_epochs, n_curves))
+        for n in range(config['n_reps']):
+            rep_results = results[0][n], results[1][n]
+            for j, curve in enumerate(curves):
+                curve_run, curve_stat, curve_num = curve
+                if curve_stat.startswith('train'):
+                    curves_array[:, j] += np.array(rep_results[curve_run][curve_stat]) / config['n_reps']
+                else:
+                    curves_array[:, j] += np.array(rep_results[curve_run][curve_stat][curve_num]) / config['n_reps']
+    curve_stat = ""
+    for j, curve in enumerate(curves):
+        curve_run, curve_stat, curve_num = curve
+        color = [0, 0, 0, 1]
+        color[j] = j / (len(curves) - 1)
+        curve = curves_array[:, j]
+        if curve_stat.endswith('accuracy'):
+            plt.plot(np.arange(len(curve)), curve * 100, label=f'{capacities[0]} Capacity',
+                     c=tuple(color))
+        else:
+            plt.plot(np.arange(len(curve)), -np.log(curve), label=f'{capacities[0]} Capacity',
+                     c=tuple(color))
+    if curve_stat.endswith('accuracy'):
+        plt.ylabel('Accuracy (%)')
+    else:
+        plt.ylabel('Performance (-log[continuous loss])')
+    plt.xlabel("Epochs")
+    plt.legend()
+    plt.title(title)
+    plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
+    plt.show()
+
+
+
+for i, params in enumerate(config['results']):
     firsts, seconds = config['results'][params]
 
     a_train_b_0_avg_0 = np.zeros((config['first_epochs'],))
@@ -128,7 +173,7 @@ for params in config['results']:
         second = seconds[n]
         a_train_b_0_avg_0 += np.array(first['train_accuracy']) / config['n_reps']
         a_test_c_0_avg_0 += np.array(first['tests_accuracy'][0]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = i/3
     plt.plot(np.arange(len(a_train_b_0_avg_0)), a_train_b_0_avg_0*100, label=f'b=0 {params[0]} nodes',
                   c=(0, 0, coef, 1))
     plt.plot(np.arange(len(a_test_c_0_avg_0)), a_test_c_0_avg_0*100, label=f'c=0 {params[0]} nodes',
@@ -140,7 +185,7 @@ plt.title('first: generalization learning')
 plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
 plt.show()
 
-for params in config['results']:
+for i, params in enumerate(config['results']):
     firsts, seconds = config['results'][params]
 
     a_train_b_0_avg_0 = np.zeros((config['first_epochs'],))
@@ -151,7 +196,7 @@ for params in config['results']:
         a_train_b_0_avg_0 += np.array(first['train_continuous']) / config['n_reps']
         a_test_c_0_avg_0 += np.array(first['tests_continuous'][0]) / config['n_reps']
 
-    coef = np.log10(params[0]) / top
+    coef = i/3
     plt.plot(np.arange(len(a_train_b_0_avg_0)), -np.log(a_train_b_0_avg_0), label=f'b=0 {params[0]} nodes',
                   c=(0, 0, coef, 1))
     plt.plot(np.arange(len(a_test_c_0_avg_0)), -np.log(a_test_c_0_avg_0), label=f'c=0 {params[0]} nodes',
@@ -164,7 +209,7 @@ plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
 plt.show()
 
 # --- Plot 2 ---
-for params in config['results']:
+for i, params in enumerate(config['results']):
     firsts, seconds = config['results'][params]
 
     a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
@@ -174,7 +219,7 @@ for params in config['results']:
         second = seconds[n]
         a_train_c_1_avg_1 += np.array(second['train_accuracy']) / config['n_reps']
         a_train_b_0_avg_1 += np.array(second['tests_accuracy'][0]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = i/3
     plt.plot(np.arange(len(a_train_c_1_avg_1)), a_train_c_1_avg_1*100, label=f'c=1 {params[0]} nodes',
                   c=(0, 0, coef, 1))
     plt.plot(np.arange(len(a_train_b_0_avg_1)), a_train_b_0_avg_1*100, label=f'b=0 {params[0]} nodes',
@@ -187,7 +232,7 @@ plt.title('second: memorization forgetting')
 plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
 plt.show()
 
-for params in config['results']:
+for i, params in enumerate(config['results']):
     firsts, seconds = config['results'][params]
 
     a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
@@ -197,7 +242,7 @@ for params in config['results']:
         second = seconds[n]
         a_train_c_1_avg_1 += np.array(second['train_continuous']) / config['n_reps']
         a_train_b_0_avg_1 += np.array(second['tests_continuous'][0]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = i/3
     plt.plot(np.arange(len(a_train_c_1_avg_1)), -np.log(a_train_c_1_avg_1), label=f'c=1 {params[0]} nodes',
                   c=(0, 0, coef, 1))
     plt.plot(np.arange(len(a_train_b_0_avg_1)), -np.log(a_train_b_0_avg_1), label=f'b=0 {params[0]} nodes',
@@ -212,7 +257,7 @@ plt.show()
 
 # --- Plot 3 ---
 
-for params in config['results']:
+for i, params in enumerate(config['results']):
     firsts, seconds = config['results'][params]
 
     a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
@@ -223,7 +268,7 @@ for params in config['results']:
 
         a_train_c_1_avg_1 += np.array(second['train_accuracy']) / config['n_reps']
         a_test_c_0_avg_1 += np.array(second['tests_accuracy'][1]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = i/3
     plt.plot(np.arange(len(a_train_c_1_avg_1)), a_train_c_1_avg_1*100, label=f'a_train_c_1_avg_1 {params[0]} nodes',
                   c=(0, 0, coef, 1))
     plt.plot(np.arange(len(a_test_c_0_avg_1)), a_test_c_0_avg_1*100, label=f'a_test_c_0_avg_1 {params[0]} nodes',
@@ -236,7 +281,7 @@ plt.title('second: generalization forgetting')
 plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
 plt.show()
 
-for params in config['results']:
+for i, params in enumerate(config['results']):
     firsts, seconds = config['results'][params]
 
     a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
@@ -247,7 +292,7 @@ for params in config['results']:
 
         a_train_c_1_avg_1 += np.array(second['train_continuous']) / config['n_reps']
         a_test_c_0_avg_1 += np.array(second['tests_continuous'][1]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = i/3
     plt.plot(np.arange(len(a_train_c_1_avg_1)), -np.log(a_train_c_1_avg_1), label=f'a_train_c_1_avg_1 {params[0]} nodes',
                   c=(0, 0, coef, 1))
     plt.plot(np.arange(len(a_test_c_0_avg_1)), -np.log(a_test_c_0_avg_1), label=f'a_test_c_0_avg_1 {params[0]} nodes',
@@ -273,7 +318,7 @@ for params in config['results']:
 
         a_train_b_0_avg_1 += np.array(second['tests_accuracy'][0]) / config['n_reps']
         a_test_c_0_avg_1 += np.array(second['tests_accuracy'][1]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = np.log10(params[0]) /np.log(5) / top
     plt.plot(np.arange(len(a_train_b_0_avg_1)), a_train_b_0_avg_1*100, label=f'a_train_b_0_avg_1 {params[0]} nodes',
                   c=(coef, 0, 0, 1))
     plt.plot(np.arange(len(a_test_c_0_avg_1)), a_test_c_0_avg_1*100, label=f'a_test_c_0_avg_1 {params[0]} nodes',
@@ -297,7 +342,7 @@ for params in config['results']:
 
         a_train_b_0_avg_1 += np.array(second['tests_continuous'][0]) / config['n_reps']
         a_test_c_0_avg_1 += np.array(second['tests_continuous'][1]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = np.log10(params[0]) /np.log(5) / top / top
     plt.plot(np.arange(len(a_train_b_0_avg_1)), -np.log(a_train_b_0_avg_1), label=f'a_train_b_0_avg_1 {params[0]} nodes',
                   c=(coef, 0, 0, 1))
     plt.plot(np.arange(len(a_test_c_0_avg_1)), -np.log(a_test_c_0_avg_1), label=f'a_test_c_0_avg_1 {params[0]} nodes',
@@ -323,7 +368,7 @@ for params in config['results']:
 
         a_train_b_0_avg_1 += np.array(second['tests_accuracy'][0]) / config['n_reps']
         a_test_c_0_avg_1 += np.array(second['tests_accuracy'][1]) / config['n_reps']
-    coef = np.log10(params[0]) / top
+    coef = np.log10(params[0]) /np.log(5) / top / top
     delta_curve = a_test_c_0_avg_1*100 - a_train_b_0_avg_1*100
     plt.plot(np.arange(len(a_train_b_0_avg_1)), delta_curve,
              label=f'a_train_c_0_avg_1-a_train_b_0_avg_1 {params[0]} nodes',

@@ -88,8 +88,16 @@ from utils import get_most_recent
 #     plt.title('second: all three combined')
 # plt.show()
 
+#
+#
+# {0: 10, 1: 11, 2: 13, 3: 12, 4: 11, 5: 10, 6: 10, 7: 11, 8: 10, 9: 9, 10: 10, 11: 11, 12: 11, 13: 13, 14: 11, 15: 11, 16: 11, 17: 11, 18: 10, 19: 11}
+#
+#
+
 # Model Sizes for each seed with sample size 30 NOISE=0.5
 # {0: 9, 1: 9, 2: 9, 3: 8, 4: 10, 5: 9, 6: 8, 7: 9, 8: 10, 9: 9, 10: 8, 11: 9, 12: 11, 13: 8, 14: 10, 15: 8, 16: 9, 17: 8, 18: 8, 19: 10}
+# Model Sizes for each seed with sample size 50 NOISE=0.5
+# {0: 12, 1: 11, 2: 12, 3: 11, 4: 13, 5: 11, 6: 13, 7: 11, 8: 12, 9: 13, 10: 13, 11: 11, 12: 12, 13: 12, 14: 12, 15: 11, 16: 13, 17: 12, 18: 11, 19: 13}
 # Model Sizes for each seed with sample size 50 NOISE=1.0
 #{0: 12, 1: 12, 2: 13, 3: 13, 4: 13, 5: 12, 6: 13, 7: 12, 8: 13, 9: 11, 10: 12, 11: 13, 12: 13, 13: 12, 14: 11, 15: 11, 16: 12, 17: 12, 18: 11, 19: 15}
 # Sample Sizes for each seed with hidden size 10 NOISE=0.1

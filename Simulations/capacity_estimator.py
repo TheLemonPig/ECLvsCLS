@@ -15,22 +15,25 @@ from utils import make_data
 config = dict({
     'input_size': 5,
     'output_size': 5,
-    'sample_size': 50,
+    'sample_size': 10,
+    'context_size': 5,
     'model_layers': 2,
     # Extra parameters
     'first_epochs': -1,
     'stops': ('delta_train', 'train_accuracy'),
+    'delta_min': 10e-5,
+    'epoch_min': 5000,
     'second_epochs': 2000,
     'lr': 0.001,
     'n_reps': 20,
     # Generalization parameters
-    'noise': 0.5,  # 1 = random noise function
+    'noise': 0.1,  # 1 = random noise function
     'signal_complexity': 2.0,  # 0 = identity function
     'criterion': nn.MSELoss,
-    'optimizer': optim.Adam
+    'optimizer': optim.SGD
 })
 config['seeds'] = list(range(config['n_reps']))
-start_size = 12
+start_size = 10
 seed_capacities = dict({k: -1 for k in range(config['n_reps'])})
 for seed in config['seeds']:
     print(f'Finding Sufficient Capacity for seed={seed}')
@@ -46,7 +49,7 @@ for seed in config['seeds']:
 
         torch.manual_seed(seed)
         # Create an instance of the VectorMapper class
-        model = Associator(config['input_size'], hidden_size, config['output_size'])
+        model = Associator(config['input_size'], hidden_size, config['output_size'], context_size=config['context_size'])
 
         # Define a loss function and an optimizer
         criterion = config['criterion']()
@@ -62,7 +65,8 @@ for seed in config['seeds']:
         y = (1.0 - config['noise']) * rotate(x, n_dims=int(config['signal_complexity'])) + \
             config['noise'] * make_data(config['sample_size'], config['input_size'], seed+1)
 
-        results = trainer.train((x, y, 0), num_epochs=config['first_epochs'], stops=config['stops'])
+        results = trainer.train((x, y, 0), num_epochs=config['first_epochs'], stops=config['stops'],
+                                epoch_min=config['epoch_min'])
         seed_capacity[hidden_size] = (results['train_accuracy'][-1] == 1.0)
     sufficient_capacity = start_size
     for hidden_size in seed_capacity.keys():

@@ -27,7 +27,7 @@ config = dict({
     'lr': 0.001,
     'n_reps': 20,
     # Generalization parameters
-    'noise': 0.1,  # 1 = random noise function
+    'noise': 0.5,  # 1 = random noise function
     'signal_complexity': 2.0,  # 0 = identity function
     'criterion': nn.MSELoss,
     'optimizer': optim.SGD

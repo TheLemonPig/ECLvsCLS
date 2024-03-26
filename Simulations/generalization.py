@@ -1,17 +1,17 @@
 import torch
 from torch import optim, nn
-import numpy as np
-import matplotlib.pyplot as plt
 from datetime import datetime
 import pickle
 import os
-from typing import List, Tuple
+import copy
 
 from utils import get_most_recent, make_data
+from Visualize.plot_curves import plot_capacity_curves
+from Visualize.plot_performance import plot_performance
 from Models.associator import Associator, Trainer
 from Models.transforms import rotate
 
-from_file = False
+from_file = True
 
 if not from_file:
 
@@ -119,291 +119,53 @@ else:
 
 # ---- Present Results ----
 
-top = np.log(config['relative_sizes'][-1]*max(config['sufficient_capacities']))/np.log(5)
+capacities = config['relative_sizes']
 
-# --- Plot 1 ---
+# First Plots
+plot_capacity_curves(config, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
+                     'Generalization and Memorization')
+plot_capacity_curves(config, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
+                     'Generalization and Memorization')
 
+plot_performance(config, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
+                 'Generalization and Memorization', ['Memorization', 'Generalization'])
+plot_performance(config, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
+                 'Generalization and Memorization', ['Memorization', 'Generalization'])
 
-def plot_capacity_curves(curves: List[Tuple[int, str, int]], capacities: List[float], title: str):
-    curves_array = None
-    for parameters in config['results']:
-        results = config['results'][parameters]
-        n_epochs = curves[0][0] * config['second_epochs'] + (1 - curves[0][0]) * config['first_epochs']
-        n_curves = len(curves)
-        curves_array = np.zeros((n_epochs, n_curves))
-        for n in range(config['n_reps']):
-            rep_results = results[0][n], results[1][n]
-            for j, curve in enumerate(curves):
-                curve_run, curve_stat, curve_num = curve
-                if curve_stat.startswith('train'):
-                    curves_array[:, j] += np.array(rep_results[curve_run][curve_stat]) / config['n_reps']
-                else:
-                    curves_array[:, j] += np.array(rep_results[curve_run][curve_stat][curve_num]) / config['n_reps']
-    curve_stat = ""
-    for j, curve in enumerate(curves):
-        curve_run, curve_stat, curve_num = curve
-        color = [0, 0, 0, 1]
-        color[j] = j / (len(curves) - 1)
-        curve = curves_array[:, j]
-        if curve_stat.endswith('accuracy'):
-            plt.plot(np.arange(len(curve)), curve * 100, label=f'{capacities[0]} Capacity',
-                     c=tuple(color))
-        else:
-            plt.plot(np.arange(len(curve)), -np.log(curve), label=f'{capacities[0]} Capacity',
-                     c=tuple(color))
-    if curve_stat.endswith('accuracy'):
-        plt.ylabel('Accuracy (%)')
-    else:
-        plt.ylabel('Performance (-log[continuous loss])')
-    plt.xlabel("Epochs")
-    plt.legend()
-    plt.title(title)
-    plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-    plt.show()
+temp_config = copy.deepcopy(config)
+temp_config['noise'] = 0.5
+other_config = get_most_recent(prefix='Generalization', config=temp_config)
 
+configs = [config, other_config]
 
+plot_performance(configs, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
+                 'Generalization and Memorization', ['Memorization', 'Generalization'])
+plot_performance(configs, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
+                 'Generalization and Memorization', ['Memorization', 'Generalization'])
+# # Second Plots
+# plot_capacity_curves(config, [(1, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
+#                      'Memorization Forgetting')
+# plot_capacity_curves(config, [(1, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
+#                      'Memorization Forgetting')
+#
+# # Third Plots
+# plot_capacity_curves(config, [(1, 'train_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                      'Generalization Forgetting')
+# plot_capacity_curves(config, [(1, 'train_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                      'Generalization Forgetting')
+#
+# # Fourth Plots
+# plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                      'Memorization VS Generalization Forgetting')
+# plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                      'Memorization VS Generalization Forgetting')
+#
+# # Fifth Plots
+# plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                      'Memorization Over Generalization Forgetting', delta=True)
+# plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                      'Memorization Over Generalization Forgetting', delta=True)
 
-for i, params in enumerate(config['results']):
-    firsts, seconds = config['results'][params]
-
-    a_train_b_0_avg_0 = np.zeros((config['first_epochs'],))
-    a_test_c_0_avg_0 = np.zeros((config['first_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-        a_train_b_0_avg_0 += np.array(first['train_accuracy']) / config['n_reps']
-        a_test_c_0_avg_0 += np.array(first['tests_accuracy'][0]) / config['n_reps']
-    coef = i/3
-    plt.plot(np.arange(len(a_train_b_0_avg_0)), a_train_b_0_avg_0*100, label=f'b=0 {params[0]} nodes',
-                  c=(0, 0, coef, 1))
-    plt.plot(np.arange(len(a_test_c_0_avg_0)), a_test_c_0_avg_0*100, label=f'c=0 {params[0]} nodes',
-                  c=(coef, 0, 0, 1))
-plt.ylabel('Accuracy (%)')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('first: generalization learning')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-for i, params in enumerate(config['results']):
-    firsts, seconds = config['results'][params]
-
-    a_train_b_0_avg_0 = np.zeros((config['first_epochs'],))
-    a_test_c_0_avg_0 = np.zeros((config['first_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-        a_train_b_0_avg_0 += np.array(first['train_continuous']) / config['n_reps']
-        a_test_c_0_avg_0 += np.array(first['tests_continuous'][0]) / config['n_reps']
-
-    coef = i/3
-    plt.plot(np.arange(len(a_train_b_0_avg_0)), -np.log(a_train_b_0_avg_0), label=f'b=0 {params[0]} nodes',
-                  c=(0, 0, coef, 1))
-    plt.plot(np.arange(len(a_test_c_0_avg_0)), -np.log(a_test_c_0_avg_0), label=f'c=0 {params[0]} nodes',
-                  c=(coef, 0, 0, 1))
-plt.ylabel('Performance (-log[continuous loss])')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('first: generalization learning')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-# --- Plot 2 ---
-for i, params in enumerate(config['results']):
-    firsts, seconds = config['results'][params]
-
-    a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
-    a_train_b_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-        a_train_c_1_avg_1 += np.array(second['train_accuracy']) / config['n_reps']
-        a_train_b_0_avg_1 += np.array(second['tests_accuracy'][0]) / config['n_reps']
-    coef = i/3
-    plt.plot(np.arange(len(a_train_c_1_avg_1)), a_train_c_1_avg_1*100, label=f'c=1 {params[0]} nodes',
-                  c=(0, 0, coef, 1))
-    plt.plot(np.arange(len(a_train_b_0_avg_1)), a_train_b_0_avg_1*100, label=f'b=0 {params[0]} nodes',
-                  c=(coef, 0, 0, 1))
-
-plt.ylabel('Accuracy (%)')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: memorization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-for i, params in enumerate(config['results']):
-    firsts, seconds = config['results'][params]
-
-    a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
-    a_train_b_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-        a_train_c_1_avg_1 += np.array(second['train_continuous']) / config['n_reps']
-        a_train_b_0_avg_1 += np.array(second['tests_continuous'][0]) / config['n_reps']
-    coef = i/3
-    plt.plot(np.arange(len(a_train_c_1_avg_1)), -np.log(a_train_c_1_avg_1), label=f'c=1 {params[0]} nodes',
-                  c=(0, 0, coef, 1))
-    plt.plot(np.arange(len(a_train_b_0_avg_1)), -np.log(a_train_b_0_avg_1), label=f'b=0 {params[0]} nodes',
-                  c=(coef, 0, 0, 1))
-
-plt.ylabel('Performance (-log[continuous loss])')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: memorization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-# --- Plot 3 ---
-
-for i, params in enumerate(config['results']):
-    firsts, seconds = config['results'][params]
-
-    a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
-    a_test_c_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-
-        a_train_c_1_avg_1 += np.array(second['train_accuracy']) / config['n_reps']
-        a_test_c_0_avg_1 += np.array(second['tests_accuracy'][1]) / config['n_reps']
-    coef = i/3
-    plt.plot(np.arange(len(a_train_c_1_avg_1)), a_train_c_1_avg_1*100, label=f'a_train_c_1_avg_1 {params[0]} nodes',
-                  c=(0, 0, coef, 1))
-    plt.plot(np.arange(len(a_test_c_0_avg_1)), a_test_c_0_avg_1*100, label=f'a_test_c_0_avg_1 {params[0]} nodes',
-                  c=(0, coef, 0, 1))
-
-plt.ylabel('Accuracy (%)')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: generalization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-for i, params in enumerate(config['results']):
-    firsts, seconds = config['results'][params]
-
-    a_train_c_1_avg_1 = np.zeros((config['second_epochs'],))
-    a_test_c_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-
-        a_train_c_1_avg_1 += np.array(second['train_continuous']) / config['n_reps']
-        a_test_c_0_avg_1 += np.array(second['tests_continuous'][1]) / config['n_reps']
-    coef = i/3
-    plt.plot(np.arange(len(a_train_c_1_avg_1)), -np.log(a_train_c_1_avg_1), label=f'a_train_c_1_avg_1 {params[0]} nodes',
-                  c=(0, 0, coef, 1))
-    plt.plot(np.arange(len(a_test_c_0_avg_1)), -np.log(a_test_c_0_avg_1), label=f'a_test_c_0_avg_1 {params[0]} nodes',
-                  c=(0, coef, 0, 1))
-
-plt.ylabel('Performance (-log[continuous loss])')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: generalization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-# --- Plot 4 ---
-
-for params in config['results']:
-    firsts, seconds = config['results'][params]
-
-    a_train_b_0_avg_1 = np.zeros((config['second_epochs'],))
-    a_test_c_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-
-        a_train_b_0_avg_1 += np.array(second['tests_accuracy'][0]) / config['n_reps']
-        a_test_c_0_avg_1 += np.array(second['tests_accuracy'][1]) / config['n_reps']
-    coef = np.log10(params[0]) /np.log(5) / top
-    plt.plot(np.arange(len(a_train_b_0_avg_1)), a_train_b_0_avg_1*100, label=f'a_train_b_0_avg_1 {params[0]} nodes',
-                  c=(coef, 0, 0, 1))
-    plt.plot(np.arange(len(a_test_c_0_avg_1)), a_test_c_0_avg_1*100, label=f'a_test_c_0_avg_1 {params[0]} nodes',
-                  c=(0, coef, 0, 1))
-
-plt.ylabel('Accuracy (%)')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: memorization vs generalization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-for params in config['results']:
-    firsts, seconds = config['results'][params]
-
-    a_train_b_0_avg_1 = np.zeros((config['second_epochs'],))
-    a_test_c_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-
-        a_train_b_0_avg_1 += np.array(second['tests_continuous'][0]) / config['n_reps']
-        a_test_c_0_avg_1 += np.array(second['tests_continuous'][1]) / config['n_reps']
-    coef = np.log10(params[0]) /np.log(5) / top / top
-    plt.plot(np.arange(len(a_train_b_0_avg_1)), -np.log(a_train_b_0_avg_1), label=f'a_train_b_0_avg_1 {params[0]} nodes',
-                  c=(coef, 0, 0, 1))
-    plt.plot(np.arange(len(a_test_c_0_avg_1)), -np.log(a_test_c_0_avg_1), label=f'a_test_c_0_avg_1 {params[0]} nodes',
-                  c=(0, coef, 0, 1))
-
-plt.ylabel('Performance (-log[continuous loss])')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: memorization vs generalization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-# --- Plot 5 ---
-
-for params in config['results']:
-    firsts, seconds = config['results'][params]
-
-    a_train_b_0_avg_1 = np.zeros((config['second_epochs'],))
-    a_test_c_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-
-        a_train_b_0_avg_1 += np.array(second['tests_accuracy'][0]) / config['n_reps']
-        a_test_c_0_avg_1 += np.array(second['tests_accuracy'][1]) / config['n_reps']
-    coef = np.log10(params[0]) /np.log(5) / top / top
-    delta_curve = a_test_c_0_avg_1*100 - a_train_b_0_avg_1*100
-    plt.plot(np.arange(len(a_train_b_0_avg_1)), delta_curve,
-             label=f'a_train_c_0_avg_1-a_train_b_0_avg_1 {params[0]} nodes',
-             c=(coef, 0, 0, 1))
-
-plt.ylabel('Accuracy (%)')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: generalization over memorization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
-
-for params in config['results']:
-    firsts, seconds = config['results'][params]
-
-    a_train_b_0_avg_1 = np.zeros((config['second_epochs'],))
-    a_test_c_0_avg_1 = np.zeros((config['second_epochs'],))
-    for n in range(config['n_reps']):
-        first = firsts[n]
-        second = seconds[n]
-
-        a_train_b_0_avg_1 += np.array(second['tests_continuous'][0]) / config['n_reps']
-        a_test_c_0_avg_1 += np.array(second['tests_continuous'][1]) / config['n_reps']
-    coef = np.log10(params[0]) / top
-    delta_curve = -np.log(a_test_c_0_avg_1) + np.log(a_train_b_0_avg_1)
-    plt.plot(np.arange(len(a_train_b_0_avg_1)), delta_curve,
-             label=f'a_train_c_0_avg_1 - a_train_b_0_avg_1 {params[0]} nodes',
-             c=(coef, 0, 0, 1))
-
-plt.ylabel('Performance (-log[continuous loss])')
-plt.xlabel("Epochs")
-plt.legend()
-plt.title('second: generalization over memorization forgetting')
-plt.suptitle(f"Noise: {config['noise']}, N_reps: {config['n_reps']}")
-plt.show()
 
 if __name__ == "__main__":
     ...

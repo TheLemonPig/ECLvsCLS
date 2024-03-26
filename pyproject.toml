@@ -11,6 +11,7 @@ torch = "^2.1.2"
 scikit-learn = "^1.4.0"
 matplotlib = "^3.8.2"
 tqdm = "^4.66.2"
+seaborn = "^0.13.2"
 
 
 [build-system]

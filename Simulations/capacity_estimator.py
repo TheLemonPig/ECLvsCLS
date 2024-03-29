@@ -24,10 +24,10 @@ config = dict({
     'delta_min': 10e-5,
     'epoch_min': 5000,
     'second_epochs': 2000,
-    'lr': 0.001,
+    'lr': 0.01,
     'n_reps': 20,
     # Generalization parameters
-    'noise': 0.5,  # 1 = random noise function
+    'noise': 0.9,  # 1 = random noise function
     'signal_complexity': 2.0,  # 0 = identity function
     'criterion': nn.MSELoss,
     'optimizer': optim.SGD
@@ -35,10 +35,12 @@ config = dict({
 config['seeds'] = list(range(config['n_reps']))
 start_size = 10
 seed_capacities = dict({k: -1 for k in range(config['n_reps'])})
+max_epochs_needed = -1
 for seed in config['seeds']:
     print(f'Finding Sufficient Capacity for seed={seed}')
     seed_capacity = dict()
     hidden_size = start_size
+    results = None
     while (True not in seed_capacity.values()) or (False not in seed_capacity.values()):
         if len(seed_capacity) > 0 and seed_capacity[hidden_size] is True:
             print(f'Sufficient Capacity <= {hidden_size}')
@@ -68,6 +70,7 @@ for seed in config['seeds']:
         results = trainer.train((x, y, 0), num_epochs=config['first_epochs'], stops=config['stops'],
                                 epoch_min=config['epoch_min'])
         seed_capacity[hidden_size] = (results['train_accuracy'][-1] == 1.0)
+    max_epochs_needed = max(max_epochs_needed, results['n_epochs'][0])
     sufficient_capacity = start_size
     for hidden_size in seed_capacity.keys():
         if seed_capacity[hidden_size]:
@@ -78,7 +81,8 @@ for seed in config['seeds']:
                 sufficient_capacity = hidden_size
     print(f'Sufficient Capacity = {sufficient_capacity}\n')
     seed_capacities[seed] = sufficient_capacity
-
+config['max_epochs_needed'] = max_epochs_needed
+print(max_epochs_needed)
 config['model_seed_capacities'] = seed_capacities
 print(seed_capacities)
 

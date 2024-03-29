@@ -38,7 +38,7 @@ def plot_capacity_curves(config, curves: List[Tuple[int, str, int]], capacities:
     if curve_stat.endswith('accuracy'):
         plt.ylabel('Accuracy (%)')
     else:
-        plt.ylabel('Performance (-log[continuous loss])')
+        plt.ylabel('Performance (-log[MSE])')
     plt.xlabel("Epochs")
     plt.legend()
     plt.title(title)

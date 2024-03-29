@@ -127,35 +127,29 @@ else:
 
 capacities = config['relative_sizes']
 
-# # First Plots
-# plot_capacity_curves(config, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
-#                      'Generalization and Memorization')
-# plot_capacity_curves(config, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
-#                      'Generalization and Memorization')
-#
-# # Second Plots
-# plot_capacity_curves(config, [(1, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
-#                      'Memorization Forgetting')
-# plot_capacity_curves(config, [(1, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
-#                      'Memorization Forgetting')
-#
-# # Third Plots
-# plot_capacity_curves(config, [(1, 'train_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-#                      'Generalization Forgetting')
-# plot_capacity_curves(config, [(1, 'train_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-#                      'Generalization Forgetting')
-#
-# # Fourth Plots
-# plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-#                      'Memorization VS Generalization Forgetting')
-# plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-#                      'Memorization VS Generalization Forgetting')
-#
-# # Fifth Plots
-# plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-#                      'Memorization Over Generalization Forgetting', delta=True)
-# plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-#                      'Memorization Over Generalization Forgetting', delta=True)
+# First Plots
+plot_capacity_curves(config, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
+                     'Generalization and Memorization')
+plot_capacity_curves(config, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
+                     'Generalization and Memorization')
+
+# Second Plots
+plot_capacity_curves(config, [(0, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
+                     'Memorization: Learning and Forgetting')
+plot_capacity_curves(config, [(0, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
+                     'Memorization: Learning and Forgetting')
+
+# Third Plots
+plot_capacity_curves(config, [(0, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+                     'Generalization: Learning and Forgetting')
+plot_capacity_curves(config, [(0, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+                     'Generalization: Learning and Forgetting')
+
+# Fourth Plots
+plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+                     'Memorization Over Generalization Forgetting', delta=True)
+plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+                     'Memorization Over Generalization Forgetting', delta=True)
 
 
 configs = [
@@ -169,24 +163,18 @@ plot_performance(configs, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0
                  'Generalization and Memorization', ['Memorization', 'Generalization'])
 
 # Second Plots
-plot_performance(configs, [(1, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
-                 'Memorization Forgetting', ['Memorization Learning', 'Memorization Forgetting'])
+plot_performance(configs, [(0, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
+                 'Memorization: Learning and Forgetting', ['Memorization Learning', 'Memorization Forgetting'])
 plot_performance(configs, [(1, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
                  'Memorization Forgetting', ['Memorization Learning', 'Memorization Forgetting'])
 
 # Third Plots
-plot_performance(configs, [(1, 'train_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-                 'Generalization Forgetting', ['Memorization Learning', 'Generalization Forgetting'])
+plot_performance(configs, [(0, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+                 'Generalization: Learning and Forgetting', ['Generalization Learning', 'Generalization Forgetting'])
 plot_performance(configs, [(1, 'train_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-                 'Generalization Forgetting', ['Memorization Learning', 'Generalization Forgetting'])
+                 'Generalization Forgetting', ['Generalization Learning', 'Generalization Forgetting'])
 
 # Fourth Plots
-plot_performance(configs, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-                 'Memorization VS Generalization Forgetting', ['Memorization Forgetting', 'Generalization Forgetting'])
-plot_performance(configs, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-                 'Memorization VS Generalization Forgetting', ['Memorization Forgetting', 'Generalization Forgetting'])
-
-# Fifth Plots
 plot_performance(configs, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
                  'Memorization Over Generalization Forgetting', ['Memorization VS Generalization Forgetting'],
                  delta=True)

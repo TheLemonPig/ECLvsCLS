@@ -98,31 +98,21 @@ if not from_file:
             c_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity'])) + \
                      config['noise'] * make_data(sample_size, config['input_size'], n + 3)
 
+            # Rotated C with/without added noise
+            if config['noisy_generalization']:
+                d_data = c_data
+            else:
+                d_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity']))
+
             # Train the model on associating a_train with B cond=0 while testing a_test on C cond=0
             # This test OOD generalization
-            first = trainer.train((a_train, b_data, 0), tests=[(a_test, c_data, 0)], num_epochs=config['first_epochs'],
+            first = trainer.train((a_train, b_data, 0), tests=[(a_test, d_data, 0)], num_epochs=config['first_epochs'],
                                   stops=config['stops'], thin=10)
 
             # Train the model on associating a_train with C cond=1 while testing a_train on B & a_test on C cond=0
             # This tests retention of arbitrary and structured knowledge
-            second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, c_data, 0)],
-                                   num_epochs=config['second_epochs'], stops=config['stops'], thin=10)
-
-            # # Rotated C with/without added noise
-            # if config['noisy_generalization']:
-            #     d_data = c_data
-            # else:
-            #     d_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity']))
-            #
-            # # Train the model on associating a_train with B cond=0 while testing a_test on C cond=0
-            # # This test OOD generalization
-            # first = trainer.train((a_train, b_data, 0), tests=[(a_test, d_data, 0)], num_epochs=config['first_epochs'],
-            #                       stops=config['stops'])
-            #
-            # # Train the model on associating a_train with C cond=1 while testing a_train on B & a_test on C cond=0
-            # # This tests retention of arbitrary and structured knowledge
-            # second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, d_data, 0)],
-            #                        num_epochs=config['second_epochs'])
+            second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, d_data, 0)],
+                                   num_epochs=config['second_epochs'], thin=10)
 
             epochs_completed, epochs_planned = first['n_epochs']
 

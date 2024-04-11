@@ -3,11 +3,11 @@ from torch import optim, nn
 from datetime import datetime
 import pickle
 import os
-import copy
 
 from utils import get_most_recent, make_data
 from Visualize.plot_curves import plot_capacity_curves
 from Visualize.plot_performance import plot_performance
+from Statistics.utils import get_stats
 from Models.associator import Associator, Trainer
 from Models.transforms import rotate
 
@@ -27,16 +27,17 @@ if not from_file:
         'context_size': 5,
         'fit_samples': False,
         'fit_models': True,
-        'first_epochs': 20000,
-        'stops': ('epochs', 'delta_train'),
+        'first_epochs': -1,
+        'stops': ('delta_train',),
         'delta_min': 10e-5,
         'epoch_min': 5000,
         'model_layers': 2,  # This currently does nothing
-        'second_epochs': 2000,  # 2000,
+        'second_epochs': 10000,  # 2000,
         'lr': 0.01,
-        'n_reps': 20,
+        'n_reps': 100,
         # Generalization parameters
-        'noise': 0.1,  # 1 = random noise function
+        'noise': 0.25,  # then 0.1 then 0.9  # random noise function
+        'noisy_generalization': False,
         'signal_complexity': 2.0,  # 0 = identity function
         'criterion': nn.MSELoss,
         'optimizer': optim.SGD
@@ -97,18 +98,31 @@ if not from_file:
             c_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity'])) + \
                      config['noise'] * make_data(sample_size, config['input_size'], n + 3)
 
-            # Rotated C without added noise
-            d_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity']))
-
             # Train the model on associating a_train with B cond=0 while testing a_test on C cond=0
             # This test OOD generalization
-            first = trainer.train((a_train, b_data, 0), tests=[(a_test, d_data, 0)], num_epochs=config['first_epochs'],
-                                  stops=config['stops'])
+            first = trainer.train((a_train, b_data, 0), tests=[(a_test, c_data, 0)], num_epochs=config['first_epochs'],
+                                  stops=config['stops'], thin=10)
 
             # Train the model on associating a_train with C cond=1 while testing a_train on B & a_test on C cond=0
             # This tests retention of arbitrary and structured knowledge
-            second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, d_data, 0)],
-                                   num_epochs=config['second_epochs'])
+            second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, c_data, 0)],
+                                   num_epochs=config['second_epochs'], stops=config['stops'], thin=10)
+
+            # # Rotated C with/without added noise
+            # if config['noisy_generalization']:
+            #     d_data = c_data
+            # else:
+            #     d_data = (1.0 - config['noise']) * rotate(a_test, n_dims=int(config['signal_complexity']))
+            #
+            # # Train the model on associating a_train with B cond=0 while testing a_test on C cond=0
+            # # This test OOD generalization
+            # first = trainer.train((a_train, b_data, 0), tests=[(a_test, d_data, 0)], num_epochs=config['first_epochs'],
+            #                       stops=config['stops'])
+            #
+            # # Train the model on associating a_train with C cond=1 while testing a_train on B & a_test on C cond=0
+            # # This tests retention of arbitrary and structured knowledge
+            # second = trainer.train((a_train, c_data, 1), tests=[(a_train, b_data, 0), (a_test, d_data, 0)],
+            #                        num_epochs=config['second_epochs'])
 
             epochs_completed, epochs_planned = first['n_epochs']
 
@@ -121,66 +135,95 @@ if not from_file:
     with open(filepath, 'wb') as f:
         pickle.dump(config, f)
 else:
-    config = get_most_recent(prefix='Generalization', config={'noise': 0.5})
+    config = get_most_recent(prefix='Generalization', config={'noise': 0.25, 'noisy_generalization': False})
 
 # ---- Present Results ----
 
 capacities = config['relative_sizes']
 
 # First Plots
-plot_capacity_curves(config, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
-                     'Generalization and Memorization')
-plot_capacity_curves(config, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
-                     'Generalization and Memorization')
+# plot_capacity_curves(config, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
+#                      'Generalization and Memorization')
+# plot_capacity_curves(config, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
+#                      'Generalization and Memorization')
 
 # Second Plots
 plot_capacity_curves(config, [(0, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
-                     'Memorization: Learning and Forgetting')
+                     'Memorization: Learning and Forgetting', joint=True)
 plot_capacity_curves(config, [(0, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
-                     'Memorization: Learning and Forgetting')
+                     'Memorization: Learning and Forgetting', joint=True)
+# plot_capacity_curves(config, [(0, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
+#                      'Memorization: Learning and Forgetting')
+# plot_capacity_curves(config, [(0, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
+#                      'Memorization: Learning and Forgetting')
 
 # Third Plots
 plot_capacity_curves(config, [(0, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-                     'Generalization: Learning and Forgetting')
+                     'Generalization: Learning and Forgetting', joint=True)
 plot_capacity_curves(config, [(0, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-                     'Generalization: Learning and Forgetting')
+                     'Generalization: Learning and Forgetting', joint=True)
+# plot_capacity_curves(config, [(0, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                      'Generalization: Learning and Forgetting')
+# plot_capacity_curves(config, [(0, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                      'Generalization: Learning and Forgetting')
 
-# Fourth Plots
-plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-                     'Memorization Over Generalization Forgetting', delta=True)
-plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-                     'Memorization Over Generalization Forgetting', delta=True)
+# # Fourth Plots
+# plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                      'Memorization Over Generalization Forgetting', delta=True)
+# plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                      'Memorization Over Generalization Forgetting', delta=True)
+#
+# # Fifth Plots
+# plot_capacity_curves(config, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                      'Relative Memorization Over Generalization Forgetting', delta=True, ratio=True)
+# plot_capacity_curves(config, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                      'Relative Memorization Over Generalization Forgetting', delta=True, ratio=True)
 
 
 configs = [
-    get_most_recent(prefix='Generalization', config={'noise': noise}) for noise in [0.1, 0.5, 0.9]
+    get_most_recent(prefix='Generalization', config={
+        'noisy_generalization': False,
+        'noise': noise}) for noise in [0.25, 0.5, 0.75]
 ]
 
-# First Plots
-plot_performance(configs, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
-                 'Generalization and Memorization', ['Memorization', 'Generalization'])
-plot_performance(configs, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
-                 'Generalization and Memorization', ['Memorization', 'Generalization'])
+get_stats(configs, (0, 'train_accuracy', 0), capacities, ['t-statistic', 'p-value', 'cohen-d'])
+get_stats(configs, (0, 'tests_accuracy', 0), capacities, ['t-statistic', 'p-value', 'cohen-d'])
+get_stats(configs, (1, 'tests_accuracy', 0), capacities, ['t-statistic', 'p-value', 'cohen-d'])
+get_stats(configs, (1, 'tests_accuracy', 1), capacities, ['t-statistic', 'p-value', 'cohen-d'])
 
+#
+# # First Plots
+# plot_performance(configs, [(0, 'train_accuracy', 0), (0, 'tests_accuracy', 0)], capacities,
+#                  'Generalization and Memorization', ['Memorization', 'Generalization'])
+# plot_performance(configs, [(0, 'train_continuous', 0), (0, 'tests_continuous', 0)], capacities,
+#                  'Generalization and Memorization', ['Memorization', 'Generalization'])
+#
 # Second Plots
 plot_performance(configs, [(0, 'train_accuracy', 0), (1, 'tests_accuracy', 0)], capacities,
                  'Memorization: Learning and Forgetting', ['Memorization Learning', 'Memorization Forgetting'])
-plot_performance(configs, [(1, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
-                 'Memorization Forgetting', ['Memorization Learning', 'Memorization Forgetting'])
-
+plot_performance(configs, [(0, 'train_continuous', 0), (1, 'tests_continuous', 0)], capacities,
+                 'Memorization: Learning and Forgetting', ['Memorization Learning', 'Memorization Forgetting'])
+#
 # Third Plots
 plot_performance(configs, [(0, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
                  'Generalization: Learning and Forgetting', ['Generalization Learning', 'Generalization Forgetting'])
-plot_performance(configs, [(1, 'train_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-                 'Generalization Forgetting', ['Generalization Learning', 'Generalization Forgetting'])
-
-# Fourth Plots
-plot_performance(configs, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
-                 'Memorization Over Generalization Forgetting', ['Memorization VS Generalization Forgetting'],
-                 delta=True)
-plot_performance(configs, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
-                 'Memorization Over Generalization Forgetting', ['Memorization VS Generalization Forgetting'],
-                 delta=True)
-
+plot_performance(configs, [(0, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+                 'Generalization: Learning and Forgetting', ['Generalization Learning', 'Generalization Forgetting'])
+#
+# # Fourth Plots
+# plot_performance(configs, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                  'Memorization Over Generalization Forgetting', [''],
+#                  delta=True)
+# plot_performance(configs, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                  'Memorization Over Generalization Forgetting', [''],
+#                  delta=True)
+#
+# # Fifth Plots
+# plot_performance(configs, [(1, 'tests_accuracy', 0), (1, 'tests_accuracy', 1)], capacities,
+#                  'Relative Memorization Over Generalization Forgetting', [''],
+#                  ratio=True, delta=True)
+# plot_performance(configs, [(1, 'tests_continuous', 0), (1, 'tests_continuous', 1)], capacities,
+#                  'Relative Memorization Over Generalization Forgetting', [''],
+#                  ratio=True, delta=True)
 if __name__ == "__main__":
     ...

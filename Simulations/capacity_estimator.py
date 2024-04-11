@@ -23,11 +23,11 @@ config = dict({
     'stops': ('delta_train', 'train_accuracy'),
     'delta_min': 10e-5,
     'epoch_min': 5000,
-    'second_epochs': 2000,
+    'second_epochs': 5000,
     'lr': 0.01,
-    'n_reps': 20,
+    'n_reps': 100,
     # Generalization parameters
-    'noise': 0.9,  # 1 = random noise function
+    'noise': 0.75,  # 1 = random noise function
     'signal_complexity': 2.0,  # 0 = identity function
     'criterion': nn.MSELoss,
     'optimizer': optim.SGD

@@ -3,11 +3,13 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 from time import sleep
+import numpy as np
 
 
 class Associator(nn.Module):
     def __init__(self, input_size, hidden_size, output_size, n_conditions=2, hidden_layers=1, context_size=1):
         super(Associator, self).__init__()
+        torch.manual_seed(0)
         self.fc1 = nn.Linear(input_size+n_conditions*context_size, hidden_size)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_size, hidden_size)
@@ -37,7 +39,10 @@ class Trainer:
         self.losses = dict()
 
     def train(self, training_data, tests=None,
-              num_epochs=1000, stops=('epochs', ), epoch_min=1000, delta_min=10e-5, normalize=False, sleep_time=0.1):
+              num_epochs=1000, stops=('epochs', ), epoch_min=1000, delta_min=10e-5, normalize=False, sleep_time=0.5,
+              thin=1):
+        keep = np.random.randint(thin)
+        torch.manual_seed(0)
         # Set training regime
         regime = dict({'epochs': False,
                        'delta_train': False, 'one_delta_test': False, 'all_delta_test': False,
@@ -90,6 +95,7 @@ class Trainer:
 
         # begin training loop
         epoch = 0
+        message = ''
         for epoch in range(num_epochs):
 
             # forward pass
@@ -97,9 +103,10 @@ class Trainer:
             train_loss = self.criterion(train_predict, train_output)
 
             # collect training losses
-            self.losses['train_continuous'].append(train_loss.item())
             train_accuracy = classify_associations(train_predict.detach(), train_output, normalize)
-            self.losses['train_accuracy'].append(train_accuracy.item())
+            if epoch % thin == keep:
+                self.losses['train_continuous'].append(train_loss.item())
+                self.losses['train_accuracy'].append(train_accuracy.item())
 
             # Backward pass over training loss and update weights
             self.optimizer.zero_grad()
@@ -121,16 +128,15 @@ class Trainer:
                     test_loss = self.criterion(test_predict, test_outputs[i])
 
                     # collect test losses
-                    self.losses['tests_continuous'][i].append(test_loss.item())
                     test_accuracy = classify_associations(test_predict.detach(), test_outputs[i], normalize)
-                    self.losses['tests_accuracy'][i].append(test_accuracy.item())
+                    if epoch % thin == keep:
+                        self.losses['tests_continuous'][i].append(test_loss.item())
+                        self.losses['tests_accuracy'][i].append(test_accuracy.item())
             self.model.train()
-
             # Identify whether training should be curtailed based on our training regime
             if regime['train_accuracy']:
                 if sum(self.losses['train_accuracy'][-1:]) == 1.0:
-                    print("\n100% achieved!! Training Complete")
-                    sleep(sleep_time)
+                    message += "\n100% achieved!! Training Complete"
                     break
             if regime['one_test_accuracy'] or regime['all_test_accuracy']:
                 delta_break = False
@@ -142,25 +148,25 @@ class Trainer:
                             delta_break = True and delta_break
                 if delta_break:
                     if regime['one_test_accuracy']:
-                        print("\n100% achieved on one test!! Testing Complete")
+                        message+="\n100% achieved on one test!! Testing Complete"
                     elif regime['all_test_accuracy']:
-                        print("\n100% achieved on all tests!! Testing Complete")
+                        message+="\n100% achieved on all tests!! Testing Complete"
                     sleep(sleep_time)
                     break
             if regime['delta_train'] and epoch > epoch_min:
                 loss: list = self.losses['train_continuous']
-                past_loss: float = loss[-epoch_min]
+                past_loss: float = loss[-epoch_min//thin]
                 recent_loss: float = loss[-1]
                 delta = past_loss - recent_loss
                 if delta < delta_min:
-                    print(f'\nfrom {past_loss:.6f} to {recent_loss:.6f} over 10e4 epochs')
-                    print(f'{delta:.6f} < {delta_min} and hence by arbitrary threshold, training has converged')
+                    message+=f'\nfrom {past_loss:.6f} to {recent_loss:.6f} over 10e4 epochs'
+                    message += f'\n{delta:.6f} < {delta_min} and hence by arbitrary threshold, training has converged'
                     sleep(sleep_time)
                     break
             if (regime['one_delta_test'] or regime['all_delta_test']) and epoch > epoch_min:
                 delta_break = False
                 for i in range(n_tests):
-                    past_loss = self.losses['test_continuous'][i][-epoch_min]
+                    past_loss = self.losses['test_continuous'][i][-epoch_min//thin]
                     recent_loss = self.losses['test_continuous'][i][-1]
                     delta = past_loss - recent_loss
                     if delta < delta_min:
@@ -170,20 +176,22 @@ class Trainer:
                             delta_break = True and delta_break
                         if delta_break:
                             if regime['one_test_accuracy']:
-                                print(f'delta < {delta_min} and hence by arbitrary threshold, testing has converged')
+                                message += f'delta < {delta_min} and hence by arbitrary threshold, testing has converged'
                             sleep(sleep_time)
                             break
+        sleep(sleep_time)
+        print(message)
         # check that epoch limit is not reached if the regime is not epochs
         if not regime['epochs'] and epoch == num_epochs:
             raise RuntimeWarning('Upper Limit of Epochs reached while training in a non-epoch regime')
         self.losses['n_epochs'] = (epoch+1, num_epochs)
         if epoch + 1 < num_epochs:
-            self.pad_results()
+            self.pad_results(thin)
         return self.losses
 
-    def pad_results(self):
+    def pad_results(self, thin):
         completed_epochs, planned_epochs = self.losses['n_epochs']
-        num_padding = planned_epochs - completed_epochs
+        num_padding = int(np.ceil((planned_epochs - completed_epochs)/thin))
         self.losses['train_continuous'] += [self.losses['train_continuous'][-1] for _ in range(num_padding)]
         self.losses['train_accuracy'] += [self.losses['train_accuracy'][-1] for _ in range(num_padding)]
         for i in range(len(self.losses['tests_accuracy'])):

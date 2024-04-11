@@ -4,7 +4,7 @@ from typing import List, Tuple
 
 
 def plot_performance(configs, curves: List[Tuple[int, str, int]], capacities: List[float], title: str, labels: List[str],
-                     delta=False):
+                     ratio=False, delta=False):
     curve_stat = ""
     for config in configs:
         n_reps = config['n_reps']
@@ -19,9 +19,12 @@ def plot_performance(configs, curves: List[Tuple[int, str, int]], capacities: Li
                 for j, curve in enumerate(curves):
                     curve_run, curve_stat, curve_num = curve
                     if curve_stat.startswith('train'):
-                        curves_array[j, i, n] += rep_results[curve_run][curve_stat][-1]
+                        div = (1 - ratio) + ratio * rep_results[curve_run][curve_stat][0]
+                        curves_array[j, i, n] += rep_results[curve_run][curve_stat][-1] / div
                     else:
-                        curves_array[j, i, n] += rep_results[curve_run][curve_stat][curve_num][-1]
+                        div = (1 - ratio) + ratio * rep_results[curve_run][curve_stat][curve_num][0]
+                        # print(rep_results[curve_run][curve_stat][curve_num][0])
+                        curves_array[j, i, n] += rep_results[curve_run][curve_stat][curve_num][-1] / div
         curve_stat = curves[0][1]
         if curve_stat.endswith('accuracy'):
             curves_array = curves_array * 100
